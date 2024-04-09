@@ -1,0 +1,21 @@
+---
+- hosts: postgres_node
+  become: true
+  gather_facts: no
+  any_errors_fatal: true
+  tasks:
+    - name: Load pgsql variables
+      include_role:
+        name: postgres
+        tasks_from: noop 
+        public: yes
+
+    - name: stop pgool
+      include_role:
+        name: postgres
+        tasks_from: exploit/pgpool/stop.yml 
+
+    - name: stop postgres
+      include_role:
+        name: postgres
+        tasks_from: exploit/postgres/stop.yml 

@@ -1,0 +1,8 @@
+---
+collections:
+ - name: https://spice.socgen/nexus-wasabi/content/repositories/a8195_m9k_releases/pact/ansible-collection-community-crypto/2.11.0/ansible-collection-community-crypto-2.11.0.tar.gz
+ - name: https://spice.socgen/nexus-wasabi/content/repositories/a8195_m9k_releases/pact/ansible-collection-community-hashi_vault/5.0.0/ansible-collection-community-hashi_vault-5.0.0.tar.gz
+ - name: https://spice.socgen/nexus-wasabi/content/repositories/a8195_m9k_releases/pact/community-postgresql/3.3.0/community-postgresql-3.3.0.tar.gz
+ - name: git+https://sgithub.fr.world.socgen/transactis/ansible-collection-cloudplatform-ocs.git
+   version: '0.0.1'
+   scm: git

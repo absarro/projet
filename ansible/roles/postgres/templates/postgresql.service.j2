@@ -1,0 +1,17 @@
+[Unit]
+Description=PostgreSQL {{ postgres_db_name }} database server
+After=network.target
+ 
+[Service]
+Type=forking
+User={{ postgres_user }}
+Group={{ postgres_user }}
+ExecStart=/usr/pgsql-{{ pg_version.split('.')|first }}/bin/pg_ctl -D {{ postgres_folders.data_dir }} -l {{ postgres_folders.logs_dir }}/{{ postgres_db_name }}.server.log start
+ExecStop=/usr/pgsql-{{ pg_version.split('.')|first }}/bin/pg_ctl -D {{ postgres_folders.data_dir }} stop
+ExecReload=/bin/kill -HUP $MAINPID
+TimeoutSec=300
+Restart=always
+RestartSec=30s
+ 
+[Install]
+WantedBy=multi-user.target

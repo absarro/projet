@@ -1,0 +1,41 @@
+---
+- name: Check mandatory app_id
+  assert:
+    that: 
+      - app_id is defined
+      - app_id|count == 3
+    msg: "app_id var is mandatory and must be a trigram"
+
+- include_vars: "{{ postgres_type | lower }}.yml"
+
+- include_tasks: common/install/system.yml
+
+- block:
+    - include_tasks: epas/install/verif_routes.yml
+    - include_tasks: common/install/postgres.yml
+    - include_tasks: common/install/pgbackrest.yml      
+    - include_tasks: epas/install/pgpool.yml
+    - include_tasks: epas/setup/kmip.yml
+    - include_tasks: epas/setup/postgres.yml
+    - include_tasks: epas/setup/pgpool.yml
+    - include_tasks: common/setup/pgpackrest.yml
+  when: 
+    - postgres_type | lower == 'epas'
+    - not postgres_update|default(false)|bool
+
+- block:
+    - include_tasks: common/install/postgres.yml
+    - include_tasks: common/install/pgbackrest.yml    
+    - include_tasks: pg/install/pgpool.yml
+    - include_tasks: pg/setup/postgres.yml
+    - include_tasks: pg/setup/pgpool.yml
+    - include_tasks: common/setup/pgpackrest.yml
+  when: 
+    - postgres_type | lower == 'pg'
+    - not postgres_update|default(false)|bool
+
+
+- name: Perform minor update of PostgreSQL
+  ansible.builtin.include_tasks: "{{ postgres_type|lower }}/update/minor.yml"
+  when: postgres_update|default(false)|bool
+

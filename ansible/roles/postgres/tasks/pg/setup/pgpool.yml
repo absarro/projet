@@ -1,0 +1,250 @@
+---
+
+- name: pg | pgpool | setup | Find Node1 IP and Alias
+  set_fact:
+    node1_ip: "{{ item.key }}"
+    node1_alias: "{{ item.value }}"
+  when: "'postgres-1' in item.value"
+  with_dict: "{{ postgres_cluster_nodes_alias_map }}"
+    
+- name: pg | pgpool | setup | Create temp_map without node2
+  set_fact:
+    temp_map: "{{ postgres_cluster_nodes_alias_map | dict2items | rejectattr('key', 'equalto', node1_ip) | list | items2dict }}"
+    
+- debug:
+    msg:
+      - "Node1 IP: {{ node1_ip }}"
+      - "Node1 Alias: {{ node1_alias }}"
+      - "Temp Map: {{ temp_map }}"
+
+- name: pg | pgpool | setup | add socket directories
+  file:
+    path:  "/var/run/postgresql"
+    state: directory
+    owner: "{{ pgpool_user }}"
+    group: "{{ pgpool_user }}"
+    mode:  0750
+
+- name: pg | pgpool | setup | depot des fichiers des scripts pgpool cote postgres
+  template:
+    src: "{{ item }}"
+    dest: "{{ postgres_folders.data_dir }}/{{ item }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become_user: "{{ postgres_user }}"
+  with_items:
+    - pgpool_remote_start
+    - recovery_1st_stage
+    - recovery_2nd_stage
+
+- name: pg | pgpool | setup | depot du fichiers manage_cluster.sh
+  template:
+    src: "manage_cluster.sh"
+    dest: "{{ postgres_folders.exploit_dir }}/manage_cluster.sh"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"   
+    mode: 0750
+  become_user: "{{ postgres_user }}" 
+
+- name: pg | pgpool | setup | depot du fichiers manage_backup.sh
+  template:
+    src: "manage_backup.sh"
+    dest: "{{ postgres_folders.exploit_dir }}/manage_backup.sh"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"   
+    mode: 0750
+  become_user: "{{ postgres_user }}" 
+
+- name: pg | pgpool | setup | depot du pgpool dans /etc/sudoers.d
+  template:
+    src: "pgpool_sudoers.j2"
+    dest: "/etc/sudoers.d/pgpool"
+    mode: 0644
+ 
+- name: pg | pgpool | setup | depot des fichiers des scripts pgpool de la config
+  template:
+    src: "{{ item }}"
+    dest: "{{ pgpool_folders.conf_dir }}/{{ item }}"
+    owner: "{{ pgpool_user }}"
+    group: "{{ pgpool_user }}"
+    mode: 0750
+  become_user: "{{ pgpool_user }}"
+  with_items:
+    - failover.sh
+    - follow_primary.sh
+    - pgpool_remote_start
+    - recovery_1st_stage
+    - recovery_2nd_stage
+    - pool_hba.conf
+    - pcp.conf
+    - pgpool.conf
+    - pgpool_node_id
+
+- name: pg | pgpool | setup | install | Download Unipass CA Root cert
+  environment:
+    SSL_CERT_FILE: "/etc/pki/tls/certs/ca-bundle.crt"
+  get_url:
+    url: "https://certificate.cloud.socgen/v2/authorities/unipass-server?export=true&format=pem"
+    dest: "{{ pgpool_folders.conf_dir }}/ca_chain.pem"
+    mode: 0644
+    owner: "{{ pgpool_user }}"
+    group: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | depot des certificats
+  template:
+    src: "{{ item }}"
+    dest: "{{ pgpool_folders.conf_dir }}/{{ item }}"
+    owner: "{{ pgpool_user }}"
+    group: "{{ pgpool_user }}"
+    mode: 0600
+  become_user: "{{ pgpool_user }}"
+  with_items:
+    - server.crt
+    - server.key
+
+- name: pg | pgpool | setup | generation md5 password pgpool
+  command: "/usr/bin/pg_md5 {{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+  register: result_md5_pgpool
+  become: yes
+  become_user: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | Ajout du password md5 dans pcp.conf
+  lineinfile:
+    path: "{{ pgpool_folders.conf_dir }}/pcp.conf"
+    line: "pgpool:{{ result_md5_pgpool.stdout }}"    
+  become: yes
+  become_user: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | creation du fichier pool_passwd
+  file:
+    path: "{{ pgpool_folders.conf_dir }}/pool_passwd"
+    state: touch
+    mode: 0600
+  become: yes
+  become_user: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | ajout des mots de passes dans le fichier pool_passwd postgresql
+  lineinfile:
+    path: "{{ pgpool_folders.conf_dir }}/pool_passwd"
+    line: "{{ item }}"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  with_items:
+    - "pgpool:{{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+    - "postgres:{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+    - "{{ app_id }}:{{ hostvars[inventory_hostname][postgres_dbuser_name + '_pass']|d(postgres_dbuser_pass) }}"
+  no_log: yes
+
+
+- name: pg | pgpool | setup | Create the .pcpass file with the required entries postgres
+  file:
+    path: "/home/{{ postgres_user }}/.pcppass"
+    state: touch
+    mode: '0600'
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: pg | pgpool | setup | Append the replication entry to the .pcpass file postgres
+  lineinfile:
+    path: "/home/{{ postgres_user }}/.pcppass"
+    line: "{{ item }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  with_items:
+    - "*:*:repl:{{ hostvars[inventory_hostname][postgres_repl_name + '_pass']|d(postgres_repl_pass) }}"
+    - "*:*:pgpool:{{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+    - "*:*:postgres:{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+  no_log: yes
+
+- name: pg | pgpool | setup | Create the .pcpass file with the required entries pgpool
+  file:
+    path: "/home/{{ pgpool_user }}/.pcppass"
+    state: touch
+    mode: '0600'
+  become: yes
+  become_user: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | Append the replication entry to the .pcpass file pgpool
+  lineinfile:
+    path: "/home/{{ pgpool_user }}/.pcppass"
+    line: "{{ item }}"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  with_items:
+    - "*:*:repl:{{ hostvars[inventory_hostname][postgres_repl_name + '_pass']|d(postgres_repl_pass) }}"
+    - "*:*:pgpool:{{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+    - "*:*:postgres:{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+  no_log: yes
+
+- name: pg | pgpool | setup | Create the .pgpass file with the required entries
+  file:
+    path: "/home/{{ pgpool_user }}/.pgpass"
+    state: touch
+    mode: '0600'
+  become: yes
+  become_user: "{{ pgpool_user }}"
+
+- name: pg | pgpool | setup | Append the replication entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ pgpool_user }}/.pgpass"
+    line: "*:*:replication:repl:{{ hostvars[inventory_hostname][postgres_repl_name + '_pass']|d(postgres_repl_pass) }}"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  no_log: yes
+
+- name: pg | pgpool | setup | Append the postgres admin entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ pgpool_user }}/.pgpass"
+    line: "*:*:*:postgres:{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  no_log: yes
+
+- name: pg | pgpool | setup | Append the pgpool admin entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ pgpool_user }}/.pgpass"
+    line: "*:*:*:pgpool:{{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  no_log: yes
+
+- name: pg | pgpool | setup | Dépôt du fichier de service pgpool.service
+  template:
+    src: pgpool.service.j2
+    dest: "/usr/lib/systemd/system/pgpool.service"
+    force: yes  
+
+- name: pg | pgpool | setup | activation du service "pgpool.service
+  systemd:
+    name: pgpool
+    enabled: yes
+
+- name: pg | pgpool | setup | daemon-reload service pgpool.service
+  shell: systemctl daemon-reload
+
+- name: pg | pgpool | setup | start service pgpool 1
+  shell: systemctl restart pgpool && sleep 120
+  when: pgpool_node_id == 1
+
+- name: pg | pgpool | setup | start service pgpool 2
+  shell: systemctl restart pgpool && sleep 60
+  when: pgpool_node_id == 2
+
+- name: pg | pgpool | setup | start service pgpool 3
+  shell: systemctl restart pgpool && sleep 60
+  when: pgpool_node_id == 3
+
+- name: pg | pgpool | setup | Register node in pgpool-II
+  shell: |
+    pcp_recovery_node -h {{ node1_alias }} -p 9800 -U pgpool -n 1 -v -d -w
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | pgpool | setup | Register node in pgpool-II
+  shell: |
+    pcp_recovery_node -h {{ node1_alias }} -p 9800 -U pgpool -n 2 -v -d -w
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  when: pgpool_node_id == 1

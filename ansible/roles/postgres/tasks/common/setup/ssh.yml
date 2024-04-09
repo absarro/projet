@@ -1,0 +1,35 @@
+---
+- name: "common | ssh | setup | Create /home/{{ pgpool_user }}/.ssh folder"
+  file:
+    path: "/home/{{ pgpool_user }}/.ssh"
+    owner: "{{ pgpool_user }}" 
+    group: "{{ pgpool_user }}" 
+    state: directory
+    mode: 0700
+
+- name: "common | ssh | setup | Generate {{ pgpool_user }} ssh key pair"
+  openssh_keypair:
+    path: "/home/{{ pgpool_user }}/.ssh/id_rsa"
+    size: 2048
+    type: rsa
+    mode: 0600
+#    regenerate: always
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  register: ssh_user_ssh_keys
+
+- name: "common | ssh | setup | Deploy {{ pgpool_user }} SSH Key on itself"
+  authorized_key: 
+    user: "{{ pgpool_user }}"
+    key: "{{ ssh_user_ssh_keys.public_key }}"
+    state: present
+
+- name: "common | ssh | setup | Deploy {{ pgpool_user }} SSH Key on {{ postgres_user }}"
+  authorized_key: 
+    user: "{{ postgres_user }}"
+    key: "{{ ssh_user_ssh_keys.public_key }}"
+    state: present
+  loop: "{{ groups['postgres_node']|difference([inventory_hostname]) }}"
+  delegate_to: "{{ host }}"
+  loop_control:
+    loop_var: host

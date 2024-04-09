@@ -1,0 +1,30 @@
+---
+
+- name: common | pgbackrest | setup | demarrage de pgbackrest
+  command: "pgbackrest start"
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: common | pgbackrest | setup | vérifier si la stanza {{ app_id }} existe 
+  ansible.builtin.command:
+    cmd: "{{ postgres_folders.exploit_dir}}/manage_backup.sh -t {{ app_id }}"
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  register: stanza_status
+  changed_when: false
+
+- name: common | pgbackrest | setup | enregistrement etat de la stanza
+  set_fact:
+    stanza_state: "{{ 'installed' if 'status: ok' in stanza_status.stdout else 'stanza_ko' }}"
+
+- name: common | pgbackrest | setup | Creation de la stanza
+  command: "pgbackrest --stanza={{ app_id }} --log-level-console=info stanza-create"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1 and stanza_state != 'installed'
+
+- name: common | pgbackrest | setup | Execution 1ere sauvegarde dans le bucket S3 {{ postgres_s3_bucket_name }}
+  command: "pgbackrest --stanza={{ app_id }} --log-level-console=info backup"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1 and stanza_state != 'installed'

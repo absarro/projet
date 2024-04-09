@@ -1,0 +1,94 @@
+mirror_url:	'https://spice.socgen/nexus-wasabi/content/repositories/a8195_m9k_releases/pact'
+
+postgres_os_packages:
+  - compat-openssl10
+  - libnsl    
+  - python3-pycurl
+  - python3-libselinux
+  - python3-psycopg2
+  - glibc-langpack-en
+  - perl-ExtUtils-Embed
+  - readline-devel
+  - zlib-devel
+  - openssl-devel
+  - openldap-devel
+  - python36-devel
+  - python3-psycopg2.x86_64
+  - flex
+  - gcc
+  - gcc-c++
+  - automake
+  - autoconf
+  - libtool
+  - make
+  - readline-devel
+  - zlib-devel
+  - libzstd
+  - libzstd-devel
+  - readline
+  - bison
+  - docbook-dtds
+  - docbook-style-xsl
+  - libxslt
+  - openldap-devel
+  - libmemcached
+  - libxml2-devel
+  - lz4-devel
+  - bzip2-devel
+  - glibc-common
+  - python3-pycurl     
+  - python3-libselinux
+  - python3-psycopg2
+  - glibc-langpack-en     
+
+# install paths
+postgres_ssl_key_passphrase_script: "/home/{{ postgres_user }}/provide_key.sh"
+postgres_folders:
+  data_dir: "/applis/{{ app_id }}/pgsql/{{ postgres_version }}/data"
+  logs_dir: "/applis/{{ app_id }}/pgsql/logs"
+  archive_dir: "/applis/{{ app_id }}/pgsql/archive"
+  tablespace_dir: "/applis/{{ app_id }}/pgsql/tbs"
+  backup_dir: "/applis/{{ app_id }}/backup"
+  tmp_dir: "/applis/{{ app_id }}/tmp_pg_{{ postgres_version }}"
+  tmp_update: "/applis/{{ app_id }}/tmp_update"
+  pgpool_tmp_dir: "/applis/{{ app_id }}/tmp_pgpool"
+  exploit_dir: "/applis/{{ app_id }}/pgsql/exploit" 
+
+pgpool_folders:
+  conf_dir: "/applis/{{ app_id }}/pgpool/conf"
+  oid_dir: "/applis/{{ app_id }}/pgpool/conf/oiddir"  
+  logs_dir: "/applis/{{ app_id }}/pgpool/logs"
+  sockets_dir: "/applis/{{ app_id }}/pgpool/sockets"
+
+tables_dir: "{{ postgres_folders.tablespace_dir }}/ts_{{ app_id }}_tables"
+indexes_dir: "{{ postgres_folders.tablespace_dir }}/ts_{{ app_id }}_indexes"
+
+# PGBACKREST
+
+pgbackrest_version: "2.48"
+pgbackrest_url_map:
+  "2.48": 
+    pgbackrest: "{{ mirror_url }}/pgbackrest/{{ pgbackrest_version }}/pgbackrest-{{ pgbackrest_version }}.tar.gz"
+
+pgbackrest_folders:
+  home_dir: "/etc/pgbackrest"
+  tmp_dir: "/applis/{{ app_id }}/tmp_pgbackrest"
+
+libdev_version: "1.0"
+libdev_url_map:
+  "1.0": 
+    libyaml: "{{ mirror_url }}/libyaml/{{ libdev_version }}/libyaml-{{ libdev_version }}.rpm"
+    libssh2: "{{ mirror_url }}/libssh2/{{ libdev_version }}/libssh2-{{ libdev_version }}.rpm"  
+    libyaml_devel: "{{ mirror_url }}/libyaml-devel/{{ libdev_version }}/libyaml-devel-{{ libdev_version }}.rpm"
+    libssh2_devel: "{{ mirror_url }}/libssh2-devel/{{ libdev_version }}/libssh2-devel-{{ libdev_version }}.rpm"
+    libpq-devel: "{{ mirror_url }}/libpq-devel/{{ libdev_version }}/libpq-devel-{{ libdev_version }}.rpm"
+
+# Vault Secrets config
+postgres_secret_protocol: "https"
+postgres_secret_follow_redirects: "all"
+postgres_secret_api: "secret.cloud.socgen/v1"
+postgres_secret_token_url: "{{ postgres_secret_api }}/vault-token-full"
+postgres_secret_private_paths_url: "{{ postgres_secret_api }}/private-vault-paths"
+postgres_secret_account_name: "{{ inventory_hostname.split('-')[2] }}"
+postgres_secret_env: "{{ postgres_secret_account_name.split('_')[2] }}"
+postgres_secret_infra_env_name: "{{ inventory_hostname.split('-')[3] }}"

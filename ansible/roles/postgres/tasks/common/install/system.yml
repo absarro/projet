@@ -1,0 +1,6 @@
+---
+- name: common | postgres | install | Install require os packages
+  ansible.builtin.package:
+    name: "{{ postgres_os_packages }}"   
+    state: present
+  become: true

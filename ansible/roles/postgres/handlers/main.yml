@@ -1,0 +1,7 @@
+---
+
+- name: postgres restart
+  systemd:
+    name: "postgresql.{{ postgres_db_name }}.service"
+    enabled: yes
+    state: restarted

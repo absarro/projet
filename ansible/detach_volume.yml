@@ -1,0 +1,19 @@
+---
+- hosts: postgres_node
+  become: true
+  gather_facts: no
+  any_errors_fatal: true
+  become_flags: "-i"
+  tasks:
+    - name: Gest IAMaaS Token
+      include_role: 
+        name: sgcp-iamaas-token
+      vars:
+        sgcp_iamaas_token_scopes: ['ccs:read', 'ccs:write', 'ocs:read', 'ocs:write']
+
+    - name: Detach volumes
+      include_role:
+        name: osblk-physical-partition
+      vars:
+        osblk_physical_partition_state: detached
+        osblk_physical_partition_ocs_api_authorization_header: "{{ sgcp_iamaas_token_authorization_header }}"

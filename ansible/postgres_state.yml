@@ -1,0 +1,28 @@
+---
+- hosts: postgres_node
+  become: true
+  gather_facts: yes
+  any_errors_fatal: true
+  tasks:
+    - name: Load pgsql variables
+      include_role:
+        name: postgres
+        tasks_from: noop 
+        public: yes
+
+    - name: Déterminer le rôle de chaque nœud PostgreSQL
+      ansible.builtin.command:
+        cmd: "psql -h {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }} -p {{ postgres_port }} -U {{ postgres_admin }} -c 'SELECT pg_is_in_recovery()'"
+      become: yes
+      become_user: "{{ postgres_user }}"  
+      register: postgres_node_roles
+      changed_when: false
+
+    - name: Définir le rôle de chaque nœud PostgreSQL
+      set_fact:
+        postgres_node_role: "{{ 'standby' if 't' in postgres_node_roles.stdout else 'master' }}"
+
+    - name: affiche l'etat des noeuds
+      debug: 
+        msg: "node-{{ inventory_hostname.split('-')[1] }}: {{ postgres_node_role }}"
+

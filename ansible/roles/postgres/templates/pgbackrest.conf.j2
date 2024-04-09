@@ -1,0 +1,27 @@
+[{{ app_id }}]
+pg1-path={{ postgres_folders.data_dir }}
+pg1-user={{ postgres_user }}
+pg1-port={{ postgres_port }}
+pg-version-force={{ postgres_version }}
+
+[global]
+repo1-bundle=y
+repo1-block=y
+repo1-path=/{{ postgres_secret_env }}
+repo1-retention-full=14
+archive-async=y
+#repo1-cipher-type=aes-256-cbc
+repo1-s3-endpoint={{ postgres_s3_backend_endpoint }}
+repo1-s3-bucket={{ postgres_s3_bucket_name }}
+repo1-s3-verify-tls=n
+repo1-s3-key={{ postgres_s3_secret_id }}
+repo1-s3-key-secret={{ postgres_s3_accesskey }}
+repo1-s3-region=us-east-1
+repo1-type=s3
+compress-level=6
+log-path={{ postgres_folders.logs_dir }}
+log-level-console=info
+log-level-file=info
+spool-path={{ postgres_folders.archive_dir }}
+archive-header-check=n
+checksum-page=n

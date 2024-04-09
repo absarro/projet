@@ -1,0 +1,16 @@
+[Unit]
+Description=Pgpool-II
+After=syslog.target network.target
+
+[Service]
+
+User={{ pgpool_user }}
+Group={{ pgpool_user }}
+
+#ExecStartPre={{ pgpool_folders.conf_dir }}/mount_fip.sh
+ExecStart=/bin/pgpool -n -C -D --hba-file={{ pgpool_folders.conf_dir }}/pool_hba.conf --pcp-file={{ pgpool_folders.conf_dir }}/pcp.conf -f {{ pgpool_folders.conf_dir }}/pgpool.conf
+ExecStop=/bin/pgpool -n -C -D --hba-file={{ pgpool_folders.conf_dir }}/pool_hba.conf --pcp-file={{ pgpool_folders.conf_dir }}/pcp.conf -f {{ pgpool_folders.conf_dir }}/pgpool.conf -m fast stop
+ExecReload=/bin/pgpool -n -C -D --hba-file={{ pgpool_folders.conf_dir }}/pool_hba.conf --pcp-file={{ pgpool_folders.conf_dir }}/pcp.conf -f {{ pgpool_folders.conf_dir }}/pgpool.conf reload
+
+[Install]
+WantedBy=multi-user.target

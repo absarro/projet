@@ -1,0 +1,10 @@
+[client]
+host={% for host in kmip_servers[postgres_secret_infra_env_name] %}{{ ',' if not loop.first }}{{ host }}{% endfor %}
+
+port=5696
+username={{ kmip_username }}
+password={{ kmip_password }}
+keyfile=/etc/pykmip/key.pem
+certfile=/etc/pykmip/cert.pem
+ca_certs=/etc/pykmip/ca.pem
+#do_handshake_on_connect=True

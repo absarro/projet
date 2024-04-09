@@ -1,0 +1,75 @@
+# -----------------------------
+# PostgreSQL configuration file
+# -----------------------------
+listen_addresses = '*'                  # what IP address(es) to listen on;
+port = '{{ postgres_port }}'                             # (change requires restart)
+unix_socket_directories = '/tmp'
+max_connections = 1000                  # (change requires restart)
+
+# - SSL -
+
+ssl = on
+ssl_ca_file = '{{ postgres_folders.data_dir }}/ca_chain.pem'
+ssl_cert_file = '{{ postgres_folders.data_dir }}/server.crt'
+ssl_crl_file = ''
+ssl_key_file = '{{ postgres_folders.data_dir }}/server.key'
+ssl_ciphers = 'HIGH:MEDIUM:+3DES:!aNULL' # allowed SSL ciphers
+ssl_prefer_server_ciphers = on
+#ssl_ecdh_curve = 'prime256v1'
+ssl_min_protocol_version = 'TLSv1.2'
+#ssl_max_protocol_version = ''
+#ssl_dh_params_file = ''
+ssl_passphrase_command = 'echo "{{ postgres_ssl_cert_passphrase }}"'
+#ssl_passphrase_command_supports_reload = off
+
+# - Encryption -
+
+#encryption_key_command = '/home/postgres/provide_key.sh'
+
+#------------------------------------------------------------------------------
+# RESOURCE USAGE (except WAL)
+#------------------------------------------------------------------------------
+archive_mode = on
+archive_command = 'pgbackrest --stanza={{ app_id }} archive-push %p'
+restore_command = 'pgbackrest --stanza={{ app_id }} archive-get %f %p'
+wal_level = replica
+hot_standby = on
+wal_log_hints = on
+synchronous_commit = remote_apply
+
+# Paramètres (tunning) à mettre sur l’homologation et la prod  
+shared_buffers = 8GB
+effective_cache_size = 16GB
+maintenance_work_mem = 2GB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+effective_io_concurrency = 200
+work_mem = 8MB
+min_wal_size = 2GB
+max_wal_size = 8GB
+max_worker_processes = 12
+max_parallel_workers_per_gather = 4
+max_parallel_workers = 12
+max_parallel_maintenance_workers = 4
+#wal_keep_segments = 1000
+log_directory = '{{ postgres_folders.logs_dir}}'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+idle_in_transaction_session_timeout = 0
+log_file_mode = 0655
+logging_collector = on
+log_rotation_age = 1d
+log_rotation_size = 0 
+log_timezone = 'Europe/Paris'
+timezone = 'Europe/Paris'
+#------------------------------------------------------------------------------
+# REPLICATION
+#------------------------------------------------------------------------------
+max_wal_senders = 10            # max number of walsender processes
+max_replication_slots = 10      # max number of replication slots
+datestyle = 'iso, mdy'
+lc_messages = 'en_US.UTF-8'                     # locale for system error message
+lc_monetary = 'en_US.UTF-8'                     # locale for monetary formatting
+lc_numeric = 'en_US.UTF-8'                      # locale for number formatting
+lc_time = 'en_US.UTF-8'                         # locale for time formatting
+default_text_search_config = 'pg_catalog.english'

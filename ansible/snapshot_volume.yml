@@ -1,0 +1,46 @@
+---
+- hosts: postgres_node
+  become: true
+  gather_facts: no
+  any_errors_fatal: true
+  become_flags: "-i"
+  vars:
+    server_uid: "{{ ansible_env.PLT_VM_UUID }}"
+    server_region: "{{ ansible_env.PLT_AVAILABILITY_ZONE.split('-')[:-1]|join('-') }}"
+    server_volumes: "{{ lookup('cloudplatform.ocs.server_volumes', server_uid, region=server_region, wantlist=True) }}"
+  tasks:
+    - name: Récupération des variables d'environnement
+      setup: 
+        filter: ansible_env
+
+    - name: Gest IAMaaS Token
+      include_role: 
+        name: sgcp-iamaas-token
+      vars:
+        sgcp_iamaas_token_scopes: ['osblk:read', 'osblk:write']
+
+    - name: Create Volume Snapshot
+      environment:
+        SSL_CERT_FILE: "/etc/pki/tls/certs/ca-bundle.crt"
+      uri:
+        url: "https://osblk.{{ server_region }}.cloud.socgen/v1/volumes/{{ volume_id }}/snapshots?force=true" 
+        # By default GTS raise an error when we create a snophot of a volume in use, we need to detach it first
+        # but if we detach it the lookup of attached volumes on the server won't work anymore in this playbook.
+        # The caller needs to keep the state of the volume after detaching it then pass the volume id to this playbook.
+        # It can be an improvment but by now where going to juste pass force=true to force snaphot even if the volume is still attached
+        # To secure the process Jenkins first stop produtcs before doing the snapshot
+        follow_redirects: "all"
+        body_format: json
+        method: POST
+        headers:
+          Accept: "application/json"
+          Authorization: "{{ sgcp_iamaas_token_authorization_header }}"
+        body: 
+          description: "Snaphost Mise en Production du {{ now() }}"
+          name: "snapshot_{{ inventory_hostname }}_{{ now(fmt='%Y-%m-%d') }}"
+          tags: []
+        status_code: 202
+      loop: "{{ server_volumes }}"
+      loop_control:
+        loop_var: volume_id
+      no_log: yes

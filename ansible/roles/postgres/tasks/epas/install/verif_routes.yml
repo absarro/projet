@@ -1,0 +1,21 @@
+- name: epas | postgres | install |Tester la connectivité aux serveurs KMIP
+  wait_for:
+    host: "{{ item }}"
+    port: 5696
+    timeout: 5
+  loop: "{{ kmip_servers[postgres_secret_infra_env_name] }}"
+  register: kmip_route_test
+  ignore_errors: true
+  
+- name: epas | postgres | install |Afficher les résultats du test de connectivité
+  debug:
+    var: kmip_route_test
+    
+- name: epas | postgres | install |Vérifier si tous les tests de route ont réussi
+  set_fact:
+    all_routes_ok: "{{ (kmip_route_test.results | rejectattr('failed') | list | length) == (kmip_servers[postgres_secret_infra_env_name] | length) }}"
+    
+- name: epas | postgres | install |Afficher un message si un test de route a échoué
+  fail:
+    msg: "La route vers un ou plusieurs serveurs CIPHERTRUST est fermée. Merci de procéder à une demande d'ouverture de route."
+  when: not all_routes_ok

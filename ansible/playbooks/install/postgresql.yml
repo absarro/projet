@@ -1,0 +1,12 @@
+---
+- hosts: postgres_node
+  name: Postgres deployment playbook
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+
+  roles:
+    - role: osblk-physical-partition
+      vars:
+        osblk_physical_partition_state: mounted
+    - role: postgres

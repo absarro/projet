@@ -1,0 +1,89 @@
+---
+postgres_type: "EPAS"
+#Partie Postgres
+supported_postgres_version:
+  - "15"
+  - "15.6.0-1.el8.x86_64"
+
+postgres_url_map:
+  "15":
+    edb-server: "{{ mirror_url }}/edb-server/{{ postgres_version }}/edb-server-{{ postgres_version }}.rpm"
+    edb-server-core: "{{ mirror_url }}/edb-server-core/{{ postgres_version }}/edb-server-core-{{ postgres_version }}.rpm"
+    edb-server-contrib: "{{ mirror_url }}/edb-server-contrib/{{ postgres_version }}/edb-server-contrib-{{ postgres_version }}.rpm"    
+    edb-server-libs: "{{ mirror_url }}/edb-server-libs/{{ postgres_version }}/edb-server-libs-{{ postgres_version }}.rpm"   
+    edb-server-client: "{{ mirror_url }}/edb-server-client/{{ postgres_version }}/edb-server-client-{{ postgres_version }}.rpm"
+    edb-boost-filesystem: "{{ mirror_url }}/edb-boost-filesystem/{{ postgres_version }}/edb-boost-filesystem-{{ postgres_version }}.rpm"
+    edb-libicu66: "{{ mirror_url }}/edb-libicu66/{{ postgres_version }}/edb-libicu66-{{ postgres_version }}.rpm"
+    edb-pgagent: "{{ mirror_url }}/edb-pgagent/{{ postgres_version }}/edb-pgagent-{{ postgres_version }}.rpm"
+    edb-server-devel: "{{ mirror_url }}/edb-server-devel/{{ postgres_version }}/edb-server-devel-{{ postgres_version }}.rpm"
+    edb-server-docs: "{{ mirror_url }}/edb-server-docs/{{ postgres_version }}/edb-server-docs-{{ postgres_version }}.rpm"
+    edb-server-indexadvisor: "{{ mirror_url }}/edb-server-indexadvisor/{{ postgres_version }}/edb-server-indexadvisor-{{ postgres_version }}.rpm"
+    edb-server-plperl: "{{ mirror_url }}/edb-server-plperl/{{ postgres_version }}/edb-server-plperl-{{ postgres_version }}.rpm"
+    edb-server-plpython3: "{{ mirror_url }}/edb-server-plpython3/{{ postgres_version }}/edb-server-plpython3-{{ postgres_version }}.rpm"
+    edb-server-pltcl: "{{ mirror_url }}/edb-server-pltcl/{{ postgres_version }}/edb-server-pltcl-{{ postgres_version }}.rpm"
+    edb-server-sqlprotect: "{{ mirror_url }}/edb-server-sqlprotect/{{ postgres_version }}/edb-server-sqlprotect-{{ postgres_version }}.rpm"
+    edb-pgpool-extensions: "{{ mirror_url }}/edb-pgpool-extensions/{{ postgres_version }}/edb-pgpool-extensions-{{ postgres_version }}.rpm"
+    pgpool:
+      pgpool-II-pg15: "{{ mirror_url }}/pgpool-II-pg15/4.4.3-1pgdg.rhel8.x86_64/pgpool-II-pg15-4.4.3-1pgdg.rhel8.x86_64.rpm"
+      pgpool-II-pg15-debuginfo: "{{ mirror_url }}/pgpool-II-pg15-debuginfo/4.4.3-1pgdg.rhel8.x86_64/pgpool-II-pg15-debuginfo-4.4.3-1pgdg.rhel8.x86_64.rpm"
+      pgpool-II-pg15-extensions: "{{ mirror_url }}/pgpool-II-pg15-extensions/4.4.3-1pgdg.rhel8.x86_64/pgpool-II-pg15-extensions-4.4.3-1pgdg.rhel8.x86_64.rpm"
+      pgpool-II-pg15-devel: "{{ mirror_url }}/pgpool-II-pg15-devel/4.4.3-1pgdg.rhel8.x86_64/pgpool-II-pg15-devel-4.4.3-1pgdg.rhel8.x86_64.rpm"
+      edb-pgpool: "{{ mirror_url }}/edb-pgpool/4.4/edb-pgpool-4.4.rpm"
+      edb-pgpool-libmemcached-libs: "{{ mirror_url }}/edb-pgpool-libmemcached-libs/4.4/edb-pgpool-libmemcached-libs-4.4.rpm"
+      edb-pgpool-libs: "{{ mirror_url }}/edb-pgpool-libs/4.4/edb-pgpool-libs-4.4.rpm"
+      edb-pgpool-extensions: "{{ mirror_url }}/edb-pgpool-extensions/4.4/edb-pgpool-extensions-4.4.rpm"
+      edb-pgpool-pgdg: "{{ mirror_url }}/edb-pgpool-pgdg/4.4/edb-pgpool-pgdg-4.4.rpm"
+      edb-pgpool-devel: "{{ mirror_url }}/edb-pgpool-devel/4.4/edb-pgpool-devel-4.4.rpm"
+      edb-pgpool-debuginfo: "{{ mirror_url }}/edb-pgpool-debuginfo/4.4/edb-pgpool-debuginfo-4.4.rpm"    
+      edb-as15-pgpool-extensions: "{{ mirror_url }}/edb-as15-pgpool-extensions/4.4/edb-as15-pgpool-extensions-4.4.rpm"
+    tde_client:
+      edb-tde-kmip-client: "{{ mirror_url }}/edb-tde-kmip-client/1.0-1/edb-tde-kmip-client-1.0-1.rpm"
+
+postgres_minor_url_map:
+  "15.6.0-1.el8.x86_64":
+    edb-as15-pgagent: "{{ mirror_url }}/edb-as15-pgagent/{{ postgres_minor_version }}/edb-as15-pgagent-{{ postgres_minor_version }}.rpm"
+    edb-as15-pgpool-extensions: "{{ mirror_url }}/edb-as15-pgpool-extensions/{{ postgres_minor_version }}/edb-as15-pgpool-extensions-{{ postgres_minor_version }}.rpm"
+    edb-as15-server: "{{ mirror_url }}/edb-as15-server/{{ postgres_minor_version }}/edb-as15-server-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-client: "{{ mirror_url }}/edb-as15-server-client/{{ postgres_minor_version }}/edb-as15-server-client-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-contrib: "{{ mirror_url }}/edb-as15-server-contrib/{{ postgres_minor_version }}/edb-as15-server-contrib-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-core: "{{ mirror_url }}/edb-as15-server-core/{{ postgres_minor_version }}/edb-as15-server-core-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-docs: "{{ mirror_url }}/edb-as15-server-docs/{{ postgres_minor_version }}/edb-as15-server-docs-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-indexadvisor: "{{ mirror_url }}/edb-as15-server-indexadvisor/{{ postgres_minor_version }}/edb-as15-server-indexadvisor-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-libs: "{{ mirror_url }}/edb-as15-server-libs/{{ postgres_minor_version }}/edb-as15-server-libs-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-plperl: "{{ mirror_url }}/edb-as15-server-plperl/{{ postgres_minor_version }}/edb-as15-server-plperl-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-plpython3: "{{ mirror_url }}/edb-as15-server-plpython3/{{ postgres_minor_version }}/edb-as15-server-plpython3-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-pltcl: "{{ mirror_url }}/edb-as15-server-pltcl/{{ postgres_minor_version }}/edb-as15-server-pltcl-{{ postgres_minor_version }}.rpm"
+    edb-as15-server-sqlprotect: "{{ mirror_url }}/edb-as15-server-sqlprotect/{{ postgres_minor_version }}/edb-as15-server-sqlprotect-{{ postgres_minor_version }}.rpm"
+
+pykmip_version: "0.10.0"
+pykmip_url_map:
+  "0.10.0": 
+    pykmip: "{{ mirror_url }}/pykmip/{{ pykmip_version }}/pykmip-{{ pykmip_version }}.tar.gz"
+
+pykmip_folders:
+  home_dir: "/etc/pykmip"
+
+kmip_dev: &kmip_dev
+  - "192.87.83.1"
+
+kmip_hml: &kmip_hml
+  - "192.248.235.1"
+  - "192.248.235.2"
+
+kmip_prd: &kmip_prd
+  - "192.248.232.1"
+  - "192.248.232.2"
+  - "192.248.233.3"
+
+kmip_servers:
+  dtu: *kmip_dev
+  dev: *kmip_dev
+  ass: *kmip_dev
+  int: *kmip_dev
+  clf: *kmip_dev
+  hrf: *kmip_hml
+  hml: *kmip_hml
+  ifo: *kmip_dev
+  kli: *kmip_hml
+  hta: *kmip_hml
+  prd: *kmip_prd

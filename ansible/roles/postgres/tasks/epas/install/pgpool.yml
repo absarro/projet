@@ -1,0 +1,21 @@
+- name: epas | pgpool | install | Download pgpooledb binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ postgres_folders.pgpool_tmp_dir }}/{{ item.value|basename }}"
+  loop: "{{ postgres_url_map[postgres_version].pgpool | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: epas | pgpool | install | Download tde-client binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ postgres_folders.pgpool_tmp_dir }}/{{ item.value|basename }}"
+  loop: "{{ postgres_url_map[postgres_version].tde_client | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: epas | pgpool | install | Install rpm
+  command: "rpm -Uvh --nodeps --force {{ postgres_folders.pgpool_tmp_dir }}/*.rpm"
+  become: true
+  args:
+    warn: false

@@ -1,0 +1,67 @@
+---
+- name: common | postgres | install | Setup hostname to {{ postgres_node_alias }}
+  hostname:
+    name: "{{ postgres_node_alias }}"
+
+- name: common | postgres | install | Update /etc/hosts file 
+  lineinfile:
+    path: /etc/hosts
+    regexp: "^.*{{ hostvars[host].postgres_node_alias }}"
+    line: "{{ hostvars[host].postgres_node_hostname | regex_replace('^ip-([0-9\\-]+).*$', '\\1')|replace('-', '.') }} {{ hostvars[host].postgres_node_alias }}"
+  loop: "{{ groups['postgres_node'] }}"
+  loop_control:
+    loop_var: host 
+    label: "{{ hostvars[host].postgres_node_alias }}"
+
+- name: common | postgres | install | "create service accounts"
+  user:
+    name: "{{ item }}"
+    system: no
+    createhome: yes
+    comment: "service account for {{ item }}"
+  loop:
+    - "{{ postgres_user }}"
+    - "{{ pgpool_user }}"
+
+- name: common | postgres | install | create postgres directories
+  file:
+    path:  "{{ folder.value }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode:  0750
+    recurse: yes
+  loop: "{{ postgres_folders | dict2items }}"
+  loop_control:
+    loop_var: folder
+    label: "{{ folder.value }}"
+
+- name: common | postgres | install | create pgpool directories
+  file:
+    path:  "{{ folder.value }}"
+    state: directory
+    owner: "{{ pgpool_user }}"
+    group: "{{ pgpool_user }}"
+    mode:  0750
+    recurse: yes   
+  loop: "{{ pgpool_folders | dict2items }}"
+  loop_control:
+    loop_var: folder
+    label: "{{ folder.value }}"
+
+- name: common | postgres | install | Download postgres binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ postgres_folders.tmp_dir }}/{{ item.value|basename }}"
+  when: item.value | type_debug == 'str'
+  loop: "{{ postgres_url_map[postgres_version] | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: common | postgres | install | Install rpm
+  command: "rpm -Uvh --nodeps --force {{ postgres_folders.tmp_dir }}/*.rpm"
+  become: true
+  args:
+    warn: false
+
+- include_tasks: ../setup/ssh.yml

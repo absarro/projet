@@ -1,0 +1,76 @@
+---
+- name: common | pgbackrest | install | create pgbackrest directories
+  file:
+    path:  "{{ folder.value }}"
+    state: directory
+    mode:  0750
+    recurse: yes
+  loop: "{{ pgbackrest_folders | dict2items }}"
+  loop_control:
+    loop_var: folder
+    label: "{{ folder.value }}"
+  become: true 
+  
+- name: common | pgbackrest | install | Download libyaml and libssh2 binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ pgbackrest_folders.tmp_dir }}/{{ item.value|basename }}"
+  loop: "{{ libdev_url_map[libdev_version] | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: common | pgbackrest | install | Download pgbackrest binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ pgbackrest_folders.tmp_dir }}/{{ item.value|basename }}"
+  loop: "{{ pgbackrest_url_map[pgbackrest_version] | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: common | pgbackrest | install | Unarchive pgbackrest sources 
+  unarchive:
+    src: "{{ pgbackrest_folders.tmp_dir }}/pgbackrest-{{ pgbackrest_version }}.tar.gz"
+    dest: "{{ pgbackrest_folders.tmp_dir }}"
+    remote_src: yes
+
+- name: Install rpm
+  command: "rpm -Uvh --nodeps --force {{ pgbackrest_folders.tmp_dir }}/*.rpm"
+  become: true
+  args:
+    warn: false
+    
+- name: common | pgbackrest | install | Check if pgbackrest binary is present in sources folder
+  stat:
+    path: "{{ pgbackrest_folders.tmp_dir }}/pgbackrest-release-{{ pgbackrest_version }}/src/pgbackrest"
+  register: pgbackrest_file
+
+- name: common | pgbackrest | install | Compile pgbackrest from sources
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/"
+  shell: ./configure && make
+  args:
+    chdir: "{{ pgbackrest_folders.tmp_dir }}/pgbackrest-release-{{ pgbackrest_version }}/src"
+  when: not pgbackrest_file.stat.exists 
+
+- name: common | pgbackrest | install | Copy pgbackrest binary to "/usr/bin/"
+  copy:
+    src: "{{ pgbackrest_folders.tmp_dir }}/pgbackrest-release-{{ pgbackrest_version }}/src/pgbackrest"
+    dest: /usr/bin/pgbackrest
+    mode: 0755
+    remote_src: yes
+
+- name: common | pgbackrest | install | copy pgbackrest conf file
+  template:
+    src: pgbackrest.conf.j2
+    dest: "{{pgbackrest_folders.home_dir }}/pgbackrest.conf"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0640
+
+- name: common | pgbackrest | install | change owner on pgbackrest conf file
+  file:
+    path: "{{pgbackrest_folders.home_dir }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    state: directory
+    recurse: yes

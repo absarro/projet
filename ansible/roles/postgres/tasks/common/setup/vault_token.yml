@@ -1,0 +1,27 @@
+---
+- include_role:
+    name: sgcp-iamaas-token
+  vars:
+    sgcp_iamaas_token_scopes: ['secret:read', 'secret:write', 'secret:delete']
+
+- name: common | ssh | setup | vault_token | Get Vault client token
+  environment:
+    SSL_CERT_FILE: "/etc/pki/tls/certs/ca-bundle.crt"
+  uri:
+    url: "{{ postgres_secret_protocol }}://{{ postgres_secret_token_url }}"
+    follow_redirects: "{{ postgres_secret_follow_redirects }}"
+    body_format: json
+    method: POST
+    headers:
+      Accept: "application/json"
+      Authorization: "{{ sgcp_iamaas_token_authorization_header }}"
+    status_code: 200
+  register: _vault_token
+
+
+- name: common | ssh | setup | vault_token | Store vault client token in vars 'postgres_secret_vault_client_token/postgres_secret_vault_root_path/postgres_secret_vault_api_endpoint'
+  set_fact:
+    postgres_secret_vault_client_token: "{{ _vault_token.json.clientToken }}"
+    postgres_secret_vault_root_path: "{{_vault_token.json.privateVaultPaths.privateApiPath | regex_replace('/secret/data/') }}"
+    postgres_secret_vault_api_endpoint: "{{ _vault_token.json.privateVaultPaths.vaultApiEndpoint | regex_replace('/v1') }}"
+  no_log: yes

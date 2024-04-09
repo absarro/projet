@@ -1,0 +1,66 @@
+---
+os: ""
+postgres_user: "{{ 'enterprisedb' if postgres_type == 'EPAS' else 'postgres' }}"
+pgpool_user: "pgpool"
+postgres_port: "{{ '5444' if postgres_type == 'EPAS' else '5432' }}"
+postgresql_user_home: "/home/postgres"
+
+postgres_db_name: "{{ app_id }}"
+
+#postgres_dbuser_name: admin_user
+postgres_dbuser_pass: auto
+
+postgres_admin: "{{ 'enterprisedb' if postgres_type == 'EPAS' else 'postgres' }}"
+postgres_admin_pass: auto
+
+pgpool_dbuser_name: pgpool
+pgpool_dbuser_pass: auto
+
+postgres_repl_name: repl
+postgres_repl_pass: auto
+
+postgres_admin_users:
+  - name: "{{  postgres_dbuser_name }}"
+    pass: "{{ postgres_dbuser_pass }}" 
+    role: "LOGIN"
+    db: "{{ postgres_db_name }}"
+  - name: "{{  pgpool_dbuser_name }}"
+    pass: "{{ pgpool_dbuser_pass }}" 
+    role: "LOGIN"
+    db: "{{ postgres_db_name }}"    
+  - name: "{{  postgres_repl_name }}"
+    pass: "{{ postgres_repl_pass }}" 
+    role: "LOGIN"
+    db: "{{ postgres_db_name }}"
+  - name: "{{  postgres_admin }}"
+    pass: "{{ postgres_admin_pass }}" 
+    role: "SUPERUSER"
+    db: "{{ postgres_db_name }}"      
+
+postgres_users: "{{ postgres_admin_users + dynamic_admin_users }}"
+#postgres_users: "{{ postgres_admin_users }}" 
+
+etc_hosts_lists: []
+
+standby1_ip: "{{ hostvars['standby1']['ansible_default_ipv4']['address'] }}"
+standby2_ip: "{{ hostvars['standby2']['ansible_default_ipv4']['address'] }}"
+
+postgres_primary_hostname: "{{ groups['primary'][0] }}"
+postgres_primary_fullname: "{{ hostvars['primary1']['ansible_host'] }}"
+
+postgres_s3_backend_endpoint: "https://objs3parstd01.fr.world.socgen:443"
+postgres_s3_bucket_name: "m9k-a8195-postgres-devcn"
+
+supported_os:
+  - CentOS7
+  - RedHat8
+  - RedHat9
+
+supported_postgres_type:
+  - EDB
+  - PG
+
+supported_postgres_version:
+  - 14
+  - 15
+  - "15.6.0-1.el8.x86_64"

@@ -1,0 +1,24 @@
+---
+postgres_type: "PG"
+#Partie Postgres
+supported_postgres_version:
+  - "14" 
+
+postgres_url_map:
+  "14":
+    libs: "{{ mirror_url }}/pgsql-libs/{{ postgres_version }}/pgsql-libs-{{ postgres_version }}.rpm"
+    server: "{{ mirror_url }}/pgsql-server/{{ postgres_version }}/pgsql-server-{{ postgres_version }}.rpm"   
+    client: "{{ mirror_url }}/pgsql-client/{{ postgres_version }}/pgsql-client-{{ postgres_version }}.rpm"
+    contrib: "{{ mirror_url }}/pgsql-contrib/{{ postgres_version }}/pgsql-contrib-{{ postgres_version }}.rpm"
+    pgpool:
+      pgdg: "{{ mirror_url }}/pgpool-pgdg/14.4.4.3/pgpool-pgdg-14.4.4.3.rpm"
+      debuginfo: "{{ mirror_url }}/pgpool-debuginfo/14.4.4.3/pgpool-debuginfo-14.4.4.3.rpm"
+      extension: "{{ mirror_url }}/pgpool-extensions/14.4.4.3/pgpool-extensions-14.4.4.3.rpm"
+      devel: "{{ mirror_url }}/pgpool-devel/14.4.4.3/pgpool-devel-14.4.4.3.rpm"    
+
+postgres_minor_url_map:
+  "14.11-1PGDG.rhel8.x86_64":
+    server: "{{ mirror_url }}/postgresql14-server/{{ postgres_minor_version }}/postgresql14-server-{{ postgres_minor_version }}.rpm"  
+    postgresql: "{{ mirror_url }}/postgresql14/{{ postgres_minor_version }}/postgresql14-{{ postgres_minor_version }}.rpm"
+    libs: "{{ mirror_url }}/postgresql14-libs/{{ postgres_minor_version }}/postgresql14-libs-{{ postgres_minor_version }}.rpm"
+    contrib: "{{ mirror_url }}/postgresql14-contrib/{{ postgres_minor_version }}/postgresql14-contrib-{{ postgres_minor_version }}.rpm"

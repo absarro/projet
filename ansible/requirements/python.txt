@@ -1,0 +1,4 @@
+cloudplatform_sdk==1.2.0
+sg_ansible_vault==2.5.0
+hvac==0.11.2
+openshift==0.13.1

@@ -1,0 +1,21 @@
+---
+- include_tasks: ../../exploit/postgres/stop.yml
+
+- name: "epas | pgpool | standby | build | Rebuild standby node {{ pgpool_node_id }}"
+  shell: |
+    rm -rf {{ postgres_folders.data_dir }}/* && rm -rf {{ postgres_folders.tablespace_dir }}/* && pg_basebackup --format=p -D {{ postgres_folders.data_dir }} --label=standby1 --host={{ node1_alias }} --username=repl --wal-method=stream -R
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: "epas | pgpool | standby | build | demarrage de la base de donnees standby {{ pgpool_node_id }}"
+  command: "/usr/edb/as{{ postgres_version.split('.')|first }}/bin/pg_ctl start -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: "epas | pgpool | standby | build | Attendre que PostgreSQL standby {{ pgpool_node_id }} soit prêt"
+  wait_for:
+    path: "/tmp/.s.PGSQL.{{ postgres_port }}"
+    state: present
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"

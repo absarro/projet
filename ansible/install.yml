@@ -1,0 +1,37 @@
+---
+- hosts: postgres_node
+  become: true
+  gather_facts: no
+  any_errors_fatal: true
+  tasks:
+    - name: Attente que les hosts soient accesisbles en ssh
+      wait_for_connection:
+        timeout: 300
+
+- name: Setup postgres cluster
+  hosts: postgres_node
+  become: true
+  become_flags: "-i"
+  any_errors_fatal: true
+  tasks:
+    - name: Get CMaaS API Token
+      include_role:
+        name: sgcp-iamaas-token
+      vars:
+        sgcp_iamaas_token_scopes: ['cmaas:read', 'secret:read', 'secret:write', 'secret:delete']
+
+    - name: Check Puppet modules installation
+      include_role:
+        name: check-puppet-modules
+      vars:
+        check_puppet_modules_cmaas_api_authorization_header: "{{ sgcp_iamaas_token_authorization_header }}"
+        check_puppet_modules:
+          - sg_idm
+
+    - name: Load pgsql variables
+      include_role:
+        name: postgres
+        tasks_from: noop 
+        public: yes
+
+- import_playbook: playbooks/install/postgresql.yml

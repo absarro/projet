@@ -1,0 +1,222 @@
+---
+- name: pg | postgres | minor | update | vider le repertoire {{ postgres_folders.tmp_update }}
+  file:
+    path: "{{ postgres_folders.tmp_update }}"
+    state: absent
+
+- name: pg | postgres | minor | update | creer le repertoire {{ postgres_folders.tmp_update }}
+  file:
+    path: "{{ postgres_folders.tmp_update }}"
+    state: directory
+    mode: 0750  
+
+- name: pg | postgres | minor | update | Download postgres binaries
+  get_url:
+    url: "{{ item.value }}"
+    dest: "{{ postgres_folders.tmp_update }}/{{ item.value|basename }}"
+  loop: "{{ postgres_minor_url_map[postgres_minor_version] | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  
+- name: pg | postgres | minor | update | Déterminer le rôle de chaque nœud pgpool
+  ansible.builtin.command:
+    cmd: "pcp_node_info -h localhost -p 9800 -U pgpool -n {{ pgpool_node_id | int - 1 }} -v -d -w"
+  become: yes
+  become_user: "{{ pgpool_user }}"  
+  register: pgpool_node_roles
+  changed_when: false
+
+- name: pg | postgres | minor | update | Définir le rôle de chaque nœud pgpool
+  set_fact:
+    pgpool_node_role: "{{ 'primary' if 'primary' in pgpool_node_roles.stdout else 'standby' }}"
+
+- name: pg | postgres | minor | update | Déterminer le rôle de chaque nœud PostgreSQL
+  ansible.builtin.command:
+    cmd: "psql -h {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }} -p {{ postgres_port }} -U {{ postgres_admin }} -c 'SELECT pg_is_in_recovery()'"
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  register: postgres_node_roles
+  changed_when: false
+
+- name: pg | postgres | minor | update | Définir le rôle de chaque nœud PostgreSQL
+  set_fact:
+    postgres_node_role: "{{ 'standby' if 't' in postgres_node_roles.stdout else 'master' }}"
+
+- name: pg | postgres | minor | update | Identifier le nœud master PostgreSQL
+  set_fact:
+     postgres_master_node: "{{ groups['postgres_node'] | map('extract', hostvars, 'postgres_node_role') | zip(groups['postgres_node']) | selectattr('0', 'equalto', 'master') | map(attribute='1') | first }}"
+  run_once: true
+
+- name: pg | postgres | minor | update | Afficher le nœud master PostgreSQL
+  debug:
+    msg: "Le nœud maître PostgreSQL est {{ postgres_master_node }}"
+
+- name: pg | postgres | minor | update | Identifier le nœud master pgpool
+  set_fact:
+    pgpool_master_node: "{{ groups['postgres_node'] | map('extract', hostvars, 'pgpool_node_role') | zip(groups['postgres_node']) | selectattr('0', 'equalto', 'primary') | map(attribute='1') | first }}"
+
+- name: pg | postgres | minor | update | Afficher le nœud maître pgpool
+  debug:
+    msg: "Le nœud maître pgpool est {{ pgpool_master_node }}"
+  run_once: true  
+
+- name: pg | postgres | minor | update | Vérifier si PostgreSQL est déjà en cours d'exécution sur les nœuds standby
+  ansible.builtin.command: "/usr/pgsql-{{ postgres_version }}/bin/pg_ctl status -D {{ postgres_folders.data_dir }} -m fast"
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  register: postgres_status
+  ignore_errors: yes
+  when: postgres_node_role == 'standby'
+
+- name: pg | postgres | minor | update | Arrêt de postgres sur les noeuds standby
+  command: "/usr/pgsql-{{ postgres_version }}/bin/pg_ctl stop -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'standby' and postgres_status.rc == 0
+
+- name: pg | postgres | minor | update | Attendre que PostgreSQL soit stoppé
+  wait_for:
+    path: "/tmp/.s.PGSQL.{{ postgres_port }}"
+    state: absent
+    timeout: 60
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'standby' and postgres_status.rc == 0
+
+- name: pg | postgres | minor | update | Install rpm
+  command: "rpm -Uvh --nodeps --force {{ postgres_folders.tmp_update }}/*.rpm"
+  become: true
+  args:
+    warn: false
+  when: postgres_node_role == 'standby'    
+
+#noeuds standby
+- name: pg | postgres | minor | update | Reconstruire les instances PostgreSQL sur les nœuds standby à partir du master
+  command: "pcp_recovery_node -h {{ hostvars[pgpool_master_node]['postgres_node_alias'] }} -p 9800 -U pgpool -n {{ pgpool_node_id - 1 }} -v -d -w"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  when: postgres_node_role == 'standby'
+
+- name: pg | postgres | minor | update | Vérifier si PostgreSQL est déjà en cours d'exécution sur les nœuds standby mis a jour
+  ansible.builtin.command: "/usr/pgsql-{{ postgres_version }}/bin/pg_ctl status -D {{ postgres_folders.data_dir }} -m fast"
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  register: postgres_status_update
+  ignore_errors: yes
+  when: postgres_node_role == 'standby'
+
+- name: pg | postgres | minor | update | demarrage des bases de donnees standby
+  command: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl start -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'standby' and postgres_status_update.rc != 0
+
+- name: pg | postgres | minor | update | Attendre que PostgreSQL soit prêt
+  wait_for:
+    path: "/tmp/.s.PGSQL.5432"
+    state: present
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'standby' and postgres_status_update.rc != 0
+
+- name: pg | postgres | minor | update | Vérifier la synchronisation des nœuds standby
+  command: "psql -h {{ postgres_node_alias }} -p {{ postgres_port }} -U {{ postgres_admin }} -c 'SELECT pg_is_in_recovery()'"
+  register: postgres_standby_sync
+  until: "'t' in postgres_standby_sync.stdout"
+  retries: 5
+  delay: 10
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  when: postgres_node_role == 'standby'
+#ancien master
+- name: pg | postgres | minor | update | Arrêter PostgreSQL sur l'ancien nœud master
+  command: /usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl stop -D {{ postgres_folders.data_dir }}
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | Attendre que PostgreSQL soit stoppé
+  wait_for:
+    path: "/tmp/.s.PGSQL.{{ postgres_port }}"
+    state: absent
+    timeout: 60
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | Arrêter pgpool sur l'ancien noeud master'
+  systemd:
+    name: pgpool
+    state: stopped
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | lancer pgpool sur l'ancien noeud master'
+  systemd:
+    name: pgpool
+    state: started
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | Déterminer le rôle de chaque nœud pgpool apres a/r de l'ancien leader
+  ansible.builtin.command:
+    cmd: "pcp_node_info -h localhost -p 9800 -U pgpool -n {{ pgpool_node_id | int - 1 }} -v -d -w"
+  become: yes
+  become_user: "{{ pgpool_user }}"  
+  register: pgpool_node_roles
+  changed_when: false
+  ignore_errors: yes
+
+- name: pg | postgres | minor | update | Définir le rôle de chaque nœud pgpool apres update
+  set_fact:
+    pgpool_node_role: "{{ 'primary' if 'primary' in pgpool_node_roles.stdout else 'standby' }}"
+  ignore_errors: yes    
+
+- name: pg | postgres | minor | update | Identifier le nœud master pgpool apres update
+  set_fact:
+    pgpool_master_node: "{{ groups['postgres_node'] | map('extract', hostvars, 'pgpool_node_role') | zip(groups['postgres_node']) | selectattr('0', 'equalto', 'primary') | map(attribute='1') | first }}"
+  ignore_errors: yes
+
+- name: pg | postgres | minor | update | Install rpm
+  command: "rpm -Uvh --nodeps --force {{ postgres_folders.tmp_update }}/*.rpm"
+  become: true
+  args:
+    warn: false
+  when: postgres_node_role == 'master'     
+
+- name: pg | postgres | minor | update | Reconstruire l'instance PostgreSQL sur l'ancien noeud master
+  command: "pcp_recovery_node -h {{ hostvars[pgpool_master_node]['postgres_node_alias'] }} -p 9800 -U pgpool -n {{ pgpool_node_id - 1 }} -v -d -w"
+  become: yes
+  become_user: "{{ pgpool_user }}"
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | demarrage de la base de donnees de l'ancien master
+  command: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl start -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | Attendre que PostgreSQL soit prêt
+  wait_for:
+    path: "/tmp/.s.PGSQL.5432"
+    state: present
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: postgres_node_role == 'master'
+
+- name: pg | postgres | minor | update | Arrêter pgpool sur tout les noeuds'
+  systemd:
+    name: pgpool
+    state: stopped
+
+- name: pg | postgres | minor | update | start service pgpool 1
+  shell: systemctl restart pgpool && sleep 120
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | minor | update | start service pgpool 2
+  shell: systemctl restart pgpool && sleep 60
+  when: pgpool_node_id == 2
+
+- name: pg | postgres | minor | update | start service pgpool 3
+  shell: systemctl restart pgpool && sleep 60
+  when: pgpool_node_id == 3  

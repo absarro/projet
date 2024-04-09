@@ -1,0 +1,67 @@
+---
+- name: epas | kmip | setup | install python pykmip lib
+  command: "pip3 install pykmip --index-url https://cdp-artifactory.fr.world.socgen/artifactory/api/pypi/pypi-python-release/simple"
+
+- name: epas | kmip | setup | create pykmip home_dir
+  file:
+    path:  "{{ folder.value }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode:  0750    
+    recurse: yes
+  loop: "{{ pykmip_folders | dict2items }}"
+  loop_control:
+    loop_var: folder
+    label: "{{ folder.value }}"
+  become: true     
+
+- name: epas | kmip | setup | Download Unipass CA Root cert dans "{{ pykmip_folders.home_dir}}""
+  environment:
+    SSL_CERT_FILE: "/etc/pki/tls/certs/ca-bundle.crt"
+  get_url:
+    url: "https://certificate.cloud.socgen/v2/authorities/unipass-server?export=true&format=pem"
+    dest: "{{ pykmip_folders.home_dir }}/ca.pem"
+    mode: 0644
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+
+- name: epas | kmip | setup | depot des certificats pykmip
+  template:
+    src: "{{ item }}"
+    dest: "{{ pykmip_folders.home_dir }}/{{ item }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become_user: "{{ postgres_user }}"
+  with_items:
+    - cert.pem
+    - key.pem
+
+- name: epas | kmip | setup | read certificate info 
+  community.crypto.x509_certificate_info:
+    path: "{{ pykmip_folders.home_dir }}/cert.pem"
+  become_user: "{{ postgres_user }}"
+  register: _cert_info
+  no_log: yes
+
+- name: epas | kmip | setup | depot configuration kmip
+  template:
+    src: pykmip.conf.j2
+    dest: /etc/pykmip/pykmip.conf
+  become_user: "{{ postgres_user }}"
+  vars:
+    kmip_username: "{{ _cert_info.subject.commonName }}"
+
+- name: epas | kmip | setup | depot des scripts pykmip
+  template:
+    src: "{{ item }}"
+    dest: "{{ pykmip_folders.home_dir }}/{{ item }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become_user: "{{ postgres_user }}"
+  with_items:
+    - rotate_key.sh
+    - set_wrap_keys_env.sh
+    - get_or_create_key_id.py

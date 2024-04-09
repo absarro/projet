@@ -1,0 +1,414 @@
+---
+- name: pg | postgres | setup | Init database
+  args:
+    creates: "{{ postgres_folders.data_dir }}/postgresql.conf"
+  command: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/initdb -D {{ postgres_folders.data_dir }} --data-checksums"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | install | Download Unipass CA Root cert dans "{{ postgres_folders.data_dir }}""
+  environment:
+    SSL_CERT_FILE: "/etc/pki/tls/certs/ca-bundle.crt"
+  get_url:
+    url: "https://certificate.cloud.socgen/v2/authorities/unipass-server?export=true&format=pem"
+    dest: "{{ postgres_folders.data_dir }}/ca_chain.pem"
+    mode: 0644
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+
+- name: pg | postgres | setup | depot des certificats dans "{{ postgres_folders.data_dir }}"
+  template:
+    src: "{{ item }}"
+    dest: "{{ postgres_folders.data_dir }}/{{ item }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0600
+  become_user: "{{ postgres_user }}"
+  with_items:
+    - server.crt
+    - server.key
+
+- name: pg | postgres | setup | Vérifier si l'instance PostgreSQL est en cours d'exécution
+  shell: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl status -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  register: postgres_status
+  ignore_errors: true
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Démarrage de l'instance PostgreSQL
+  command: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl start -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: 
+    - pgpool_node_id == 1
+    - postgres_status.rc != 0
+
+- name: pg | postgres | setup | Attendre que PostgreSQL soit prêt
+  wait_for:
+    path: "/tmp/.s.PGSQL.{{ postgres_port }}"
+    state: present
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- include_tasks: ../../common/setup/vault_token.yml
+  when: postgres_users|selectattr('pass', 'equalto', 'auto')|list|count > 0
+ 
+- include_tasks: ../../common/setup/vault_password.yml
+  loop: "{{ postgres_users }}" 
+  loop_control:
+    loop_var: user
+    label: "{{ user.name }}"
+  when: "user.pass == 'auto'"
+  no_log: yes
+  vars:
+    password_varname: "{{ user.name }}_pass"
+    password_vault_path: "PACT/{{ postgres_secret_account_name }}/{{ postgres_secret_infra_env_name }}/postgresdb/users"
+    password_vault_key: "{{ user.name }}"
+    action: read
+
+- include_tasks: ../../common/setup/vault_password.yml
+  loop: "{{ postgres_users }}" 
+  loop_control:
+    loop_var: user
+    label: "{{ user.name }}"
+  when: pgpool_node_id == 1 and "user.pass == 'auto'"
+  no_log: yes
+  vars:
+    password_varname: "{{ user.name }}_pass"
+    password_vault_path: "PACT/{{ postgres_secret_account_name }}/{{ postgres_secret_infra_env_name }}/postgresdb/users"
+    password_vault_key: "{{ user.name }}"
+    action: write   
+
+- name: pg | postgres | setup | Create database applicatif {{ app_id }}
+  postgresql_db: 
+    name: "{{ postgres_db_name }}"
+    port: "{{ postgres_port }}"
+    login_unix_socket: "/tmp/"
+    state: present
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Création des bases de données PostgreSQL
+  postgresql_db:
+    name: "{{ item }}"
+    port: "{{ postgres_port }}"
+    login_unix_socket: "/tmp/"        
+    state: present
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ postgres_bdd_liste }}"
+  when: pgpool_node_id == 1 and postgres_bdd_liste is defined and postgres_bdd_liste | length > 0  
+
+- name: pg | postgres | setup | Create {{ app_id }} and pgpool user
+  postgresql_user:
+    db: "{{ item.db  }}"
+    name: "{{ item.name }}"
+    password: "{{ (item.pass == 'auto') | ternary(hostvars[inventory_hostname][item.name + '_pass'], item.pass) }}"
+    login_unix_socket: "/tmp/"    
+    role_attr_flags: "{{ item.role }}"
+    encrypted: yes
+    state: present
+    port: "{{ postgres_port }}"
+  no_log: false  
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ postgres_users }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Create the .pgpass file with the required entries
+  file:
+    path: "/home/{{ postgres_user }}/.pgpass"
+    state: touch
+    mode: '0600'
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: pg | postgres | setup | Append the replication entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ postgres_user }}/.pgpass"
+    line: "*:*:replication:repl:{{ hostvars[inventory_hostname][postgres_repl_name + '_pass']|d(postgres_repl_pass) }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  no_log: yes
+
+- name: pg | postgres | setup | Append the postgres admin entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ postgres_user }}/.pgpass"
+    line: "*:*:*:postgres:{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  no_log: yes
+
+- name: pg | postgres | setup | Append the pgpool admin entry to the .pgpass file
+  lineinfile:
+    path: "/home/{{ postgres_user }}/.pgpass"
+    line: "*:*:*:pgpool:{{ hostvars[inventory_hostname][pgpool_dbuser_name + '_pass']|d(pgpool_dbuser_pass) }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  no_log: yes
+
+- name: pg | postgres | setup | create schema and given authorization to user
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_unix_socket: "/tmp/"    
+    query: |
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = '{{ postgres_dbuser_name }}') THEN
+          CREATE SCHEMA {{ postgres_dbuser_name }} AUTHORIZATION {{ postgres_dbuser_name }};
+        END IF;
+        ALTER ROLE {{ postgres_dbuser_name }} VALID UNTIL 'infinity';
+        ALTER USER repl with REPLICATION;
+      END$$;
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ postgres_users }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | attribution des droits par bdd
+  postgresql_query:
+    db: "{{ item }}"
+    login_unix_socket: "/tmp/"    
+    query: "ALTER DATABASE {{ item }} OWNER TO {{ postgres_dbuser_name }};"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ postgres_bdd_liste }}"
+  when: pgpool_node_id == 1 and postgres_bdd_liste is defined and postgres_bdd_liste | length > 0
+
+- name: pg | postgres | setup | create tablespaces directories
+  file:
+    path:  "{{ tables_dir }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode:  0750
+    recurse: yes
+
+- name: pg | postgres | setup | create indexes directories
+  file:
+    path:  "{{ indexes_dir }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode:  0750
+    recurse: yes
+
+- name: pg | postgres | setup | Création des répertoires pour les tablespaces autres bdd
+  file:
+    path: "{{ item.1.ts_path }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+  loop: "{{ tablespaces_config | default({}) | dict2items | subelements('value') }}"
+  when: tablespaces_config is defined and tablespaces_config | length > 0
+
+- name: pg | postgres | setup | Création des répertoires pour les indexes autres bdd
+  file:
+    path: "{{ item.1.in_path }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+  loop: "{{ tablespaces_config | default({}) | dict2items | subelements('value') }}"
+  when: tablespaces_config is defined and tablespaces_config | length > 0
+
+- name: pg | postgres | setup | check if tablespace {{ app_id }} exists
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_user: "{{ postgres_user }}"
+    login_unix_socket: "/tmp/"    
+    login_password: "{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+    query: "SELECT spcname FROM pg_tablespace WHERE spcname = 'ts_{{ app_id }}_tables';"
+  register: ts_tables_result
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | check if indexes indexes {{ app_id }} exists
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_unix_socket: "/tmp/"    
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"    
+    query: "SELECT spcname FROM pg_tablespace WHERE spcname = 'ts_{{ app_id }}_indexes';"
+  register: ts_indexes_result
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Vérifier l'existence des tablespaces pour les autres bdd
+  postgresql_query:
+    db: "{{ item }}"
+    login_unix_socket: "/tmp/"    
+    query: "SELECT spcname FROM pg_tablespace;"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ postgres_bdd_liste }}"
+  register: tablespaces_existence_per_db
+  when: pgpool_node_id == 1 and postgres_bdd_liste is defined and postgres_bdd_liste | length > 0
+
+- name: pg | postgres | setup | create tablespaces
+  shell: |
+    psql -d "{{ postgres_db_name }}" -c "CREATE TABLESPACE ts_{{ app_id }}_tables LOCATION '{{ tables_dir }}';"
+    psql -d "{{ postgres_db_name }}" -c "CREATE TABLESPACE ts_{{ app_id }}_indexes LOCATION '{{ indexes_dir }}';"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1 and ts_tables_result['query_result']|length == 0 and ts_indexes_result['query_result']|length == 0 
+
+- name: pg | postgres | setup | Création des tablespaces PostgreSQL si non existants
+  postgresql_tablespace:
+    name: "{{ item.1.ts_name }}"
+    location: "{{ item.1.ts_path }}"
+    login_unix_socket: "/tmp/"    
+  become: yes
+  become_user: "{{ postgres_user }}"
+  loop: "{{ tablespaces_config | default({}) | dict2items | subelements('value') }}"
+  when: >
+    pgpool_node_id == 1 and 
+    item.0 not in tablespaces_existence_per_db.results | map(attribute='item') and
+    item.1.name not in (tablespaces_existence_per_db.results | selectattr('item', 'equalto', item.0) | map(attribute='query_result') | flatten | map(attribute='spcname') | list)
+  loop_control:
+    loop_var: item
+
+- name: pg | postgres | setup | check if clob domain exists
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+    login_unix_socket: "/tmp/"        
+    query: "SELECT 1 FROM pg_type WHERE typname = 'clob';"
+  register: clob_domain_result
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | check if blob domain exists
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+    login_unix_socket: "/tmp/"        
+    query: "SELECT 1 FROM pg_type WHERE typname = 'blob';"
+  register: blob_domain_result
+  become: yes
+  become_user: "{{ postgres_user }}"  
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Grant pg_monitor to pgpool
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_unix_socket: "/tmp/"    
+    query: |
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='pgpool') THEN
+          CREATE ROLE pgpool WITH LOGIN;
+        END IF;
+        GRANT pg_monitor TO pgpool;
+      END $$;
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | create extensions
+  shell: |
+    export PGHOST=/tmp; psql template1 -c "SELECT 1 FROM pg_extension WHERE extname = 'pgpool_recovery'" | grep -q 1 || psql template1 -c "CREATE EXTENSION pgpool_recovery;"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+  
+- name: pg | postgres | setup | grant privileges and create domains
+  postgresql_query:
+    db: "{{ postgres_db_name }}"
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ hostvars[inventory_hostname][postgres_admin + '_pass']|d(postgres_admin_pass) }}"
+    login_unix_socket: "/tmp/"        
+    query: |  
+      GRANT ALL PRIVILEGES ON TABLESPACE ts_{{ app_id }}_tables TO GROUP "{{ postgres_dbuser_name }}";
+      GRANT ALL PRIVILEGES ON TABLESPACE ts_{{ app_id }}_indexes TO GROUP "{{ postgres_dbuser_name }}";
+      {% if clob_domain_result.rowcount == 0 %}CREATE DOMAIN clob AS text;{% endif %}
+      {% if blob_domain_result.rowcount == 0 %}CREATE DOMAIN blob AS bytea;{% endif %}
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | copy postgres HBA (postgres_hba.conf)
+  template:
+    src: postgres_hba.conf.j2
+    dest: "{{ postgres_folders.data_dir }}/pg_hba.conf"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Arret de la base de donnees
+  command: /usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl stop -D {{ postgres_folders.data_dir }}
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Attendre que PostgreSQL soit stoppé
+  wait_for:
+    path: "/tmp/.s.PGSQL.{{ postgres_port }}"
+    state: absent
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | copy postgres HBA (pg_hba.conf)
+  template:
+    src: postgres_hba.conf.j2
+    dest: "{{ postgres_folders.data_dir }}/pg_hba.conf"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Create the postgres settings configuration file (postgresql.conf)
+  template:
+    src: postgresql.conf.j2
+    dest: "{{ postgres_folders.data_dir }}/postgresql.conf"
+    force: yes
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    mode: 0750
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Update wal_keep_segments in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_folders.data_dir }}/postgresql.conf"
+    regexp: '^(.*)wal_keep_segments(.*)$'
+    line: '#wal_keep_segments = 1000'
+  when: postgres_version | regex_search('^12') == None and pgpool_node_id == 1
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: pg | postgres | setup | Ensure wal_keep_segments is uncommented for version 12
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_folders.data_dir }}/postgresql.conf"
+    regexp: '^#wal_keep_segments(.*)$'
+    line: 'wal_keep_segments = 1000'
+  when: postgres_version | regex_search('^12') != None and pgpool_node_id == 1
+  become: yes
+  become_user: "{{ postgres_user }}"
+
+- name: pg | postgres | setup | demarrage de la base de donnees
+  command: "/usr/pgsql-{{ postgres_version.split('.')|first }}/bin/pg_ctl start -D {{ postgres_folders.data_dir }}"
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1
+
+- name: pg | postgres | setup | Attendre que PostgreSQL soit prêt
+  wait_for:
+    path: "/tmp/.s.PGSQL.5432"
+    state: present
+    timeout: 60  # temps d'attente en secondes
+  become: yes
+  become_user: "{{ postgres_user }}"
+  when: pgpool_node_id == 1

@@ -1,0 +1,26 @@
+---
+roles:
+  - src: git+https://sgithub.fr.world.socgen/transactis/ansible-role-fluentd.git
+    version: 0.0.9
+    scm: git
+    name: fluentd
+
+  - src: git+https://sgithub.fr.world.socgen/transactis/ansible-role-iamaas-token.git
+    version: 0.0.1
+    scm: git
+    name: sgcp-iamaas-token
+
+  - src: git+https://sgithub.fr.world.socgen/transactis/ansible-role-check-puppet-modules.git
+    version: 0.0.3
+    scm: git
+    name: check-puppet-modules
+
+  - src: git+https://sgithub.fr.world.socgen/transactis/ansible-role-osblk-physical-partition.git
+    version: 0.0.2
+    scm: git
+    name: osblk-physical-partition
+
+  - src: git+https://sgithub.fr.world.socgen/transactis/ansible-role-secrets.git
+    version: 0.0.2
+    scm: git
+    name: secrets
